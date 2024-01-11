@@ -1,15 +1,39 @@
+use grid::{Grid, KnownValue};
 use itertools::Itertools;
 use std::collections::VecDeque;
 
+mod grid;
+
 fn main() {
     let starting_grid = Grid::new(vec![
-        KnownValue { row: 0, column: 1, value: 5, },
-        KnownValue { row: 5, column: 4, value: 5, },
-        KnownValue { row: 2, column: 6, value: 5, },
+        KnownValue::new(1, 7, 2),
+        KnownValue::new(2, 2, 8),
+        KnownValue::new(2, 6, 7),
+        KnownValue::new(2, 8, 9),
+        KnownValue::new(3, 1, 6),
+        KnownValue::new(3, 3, 2),
+        KnownValue::new(3, 7, 5),
+        KnownValue::new(4, 2, 7),
+        KnownValue::new(4, 5, 6),
+        KnownValue::new(5, 4, 9),
+        KnownValue::new(5, 6, 1),
+        KnownValue::new(6, 5, 2),
+        KnownValue::new(6, 8, 4),
+        KnownValue::new(7, 3, 5),
+        KnownValue::new(7, 7, 6),
+        KnownValue::new(7, 9, 3),
+        KnownValue::new(8, 2, 9),
+        KnownValue::new(8, 4, 4),
+        KnownValue::new(8, 8, 7),
+        KnownValue::new(9, 3, 6),
     ]);
 
     let mut search_queue: VecDeque<Grid> = VecDeque::new();
     let mut solutions = Vec::new();
+
+    println!("Solving:");
+    starting_grid.print_grid();
+    println!();
 
     search_queue.push_front(starting_grid);
 
@@ -24,17 +48,25 @@ fn main() {
             .filter(|(_, x)| !x.evaluated)
             .min_by_key(|(_, x)| x.possibilities.len());
 
+        if next_cell.is_none() {
+            println!("Solution:");
+            grid.print_grid();
+        }
+
         match next_cell {
             None => solutions.push(grid), // All cells have been evaluated
             Some((cell_position, cell)) => {
                 for possibility in &cell.possibilities {
                     let mut next_grid = grid.clone();
 
-                    // Update row, column and block and check for errorss
-                    let is_invalid = Grid::get_neighbours(cell_position).into_iter().any(|p| {
-                        next_grid.remove_possibility(cell_position, *possibility);
-                        next_grid.cells[p].possibilities.len() == 0
-                    });
+                    // Update row, column and block and check for errors at the same time
+                    let is_invalid =
+                        get_neighbours(cell_position)
+                            .into_iter()
+                            .any(|neighbouring_cell| {
+                                next_grid.remove_possibility(neighbouring_cell, *possibility);
+                                next_grid.num_possibilities(neighbouring_cell) == 0
+                            });
 
                     if is_invalid {
                         continue;
@@ -51,85 +83,28 @@ fn main() {
     }
 }
 
-struct KnownValue {
-    row: usize,
-    column: usize,
-    value: usize,
-}
+fn get_neighbours(cell: usize) -> Vec<usize> {
+    let row = cell / 9; // Division rounds towards zero
+    let column = cell % 9;
 
-#[derive(Clone)]
-struct Cell {
-    evaluated: bool,
-    possibilities: Vec<usize>,
-}
-impl Cell {
-    fn new() -> Self {
-        Self {
-            evaluated: false,
-            possibilities: (0..9).collect(),
-        }
-    }
-}
+    let row_cells = (0..9).into_iter().map(|i| (row * 9) + i);
+    let column_cells = (0..9).into_iter().map(|i| (i * 9) + column);
 
-// TODO: Probably only need to store a list of unevaluated cells and the total grid
+    let block_row = row / 3;
+    let block_column = column / 3;
 
-#[derive(Clone)]
-struct Grid {
-    cells: Vec<Cell>,
-}
-impl Grid {
-    pub fn new(fixed_values: Vec<KnownValue>) -> Grid {
-        let mut empty_grid = Grid {
-            cells: vec![Cell::new(); 81],
-        };
+    let block_cells = (0..9).into_iter().map(|i| {
+        let initial_position = (i % 3) + ((i / 3) * 9);
+        let row_offset = block_row * 27;
+        let column_offset = block_column * 3;
 
-        for fixed_value in fixed_values {
-            let pos = Grid::to_cell(fixed_value.column, fixed_value.row);
-            empty_grid.cells[pos] = Cell {
-                evaluated: true,
-                possibilities: vec![fixed_value.value],
-            }
-        }
+        initial_position + row_offset + column_offset
+    });
 
-        empty_grid
-    }
-
-    fn set_value(&mut self, cell: usize, value: usize) {
-        self.cells[cell].possibilities = vec![value];
-    }
-
-    fn remove_possibility(&mut self, cell: usize, value: usize) {
-        self.cells[cell].possibilities.retain(|&p| p != value);
-    }
-
-    fn to_cell(column: usize, row: usize) -> usize {
-        (row * 9) + column
-    }
-
-    pub fn get_neighbours(cell: usize) -> Vec<usize> {
-        // Division rounds towards zero
-        let row = cell / 9;
-        let column = cell % 4;
-
-        let row_cells = (0..9).into_iter().map(|i| (row * 9) + i);
-        let column_cells = (0..9).into_iter().map(|i| (i * 9) + column);
-
-        let block_row = row / 3;
-        let block_column = column / 3;
-
-        let block_cells = (0..9).into_iter().map(|i| {
-            let initial_position = (i % 3) * 9;
-            let row_offset = block_row * 27;
-            let column_offset = block_column * 3;
-
-            initial_position + row_offset + column_offset
-        });
-
-        row_cells
-            .chain(column_cells)
-            .chain(block_cells)
-            .unique()
-            .filter(|&i| i != cell)
-            .collect()
-    }
+    row_cells
+        .chain(column_cells)
+        .chain(block_cells)
+        .unique()
+        .filter(|&i| i != cell)
+        .collect()
 }
